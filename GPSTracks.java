@@ -11,9 +11,12 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 
@@ -30,7 +33,10 @@ public class GPSTracks extends JFrame {
 
     private int selectedWidth = 1;
 
-    private List<Point2D> points = new ArrayList<>();
+    private List<Point2D> pointsWorld = new ArrayList<>();
+    private List<Point2D> pointsScreen = new ArrayList<>();
+    private List<Double> speeds = new ArrayList<>();
+    private List<OffsetDateTime> timestamps = new ArrayList<>();
 
     public GPSTracks() {
         setTitle("GPSTracks");
@@ -46,10 +52,26 @@ public class GPSTracks extends JFrame {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                g.setColor(Color.RED);
+                //g.setColor(Color.RED);
                 Graphics2D g2d = (Graphics2D) g;
-                g2d.setStroke(new BasicStroke(selectedWidth));
-                g2d.draw(path);
+                //g2d.setStroke(new BasicStroke(selectedWidth));
+                //g2d.draw(path);
+
+                for (int i = 0; i < speeds.size(); i++) {
+                    g.setColor(Color.red);
+                    if (speeds.get(i) > 2.2) {
+                        g.setColor(Color.orange);
+                    }
+                    if (speeds.get(i) > 2.6) {
+                        g.setColor(Color.yellow);
+                    }
+                    if (speeds.get(i) > 2.8) {
+                        g.setColor(Color.green);
+                    }
+                    g2d.setStroke(new BasicStroke(selectedWidth));
+                    Line2D line = new Line2D.Double(pointsScreen.get(i), pointsScreen.get(i+1));
+                    g2d.draw(line);
+                }
             }
         };
 
@@ -64,9 +86,10 @@ public class GPSTracks extends JFrame {
                     File selectedFile = fileChooser.getSelectedFile();
                     JOptionPane.showMessageDialog(null, "Du hast die Datei ausgewählt: " + selectedFile.getAbsolutePath());
                     
-                    points = loadPointsFromCSV(selectedFile.getAbsolutePath());
-                    points = transformPoints(points);
-                    path = createPathfromPoints(points);
+                    pointsWorld = loadPointsFromCSV(selectedFile.getAbsolutePath());
+                    pointsScreen = transformPoints(pointsWorld);
+                    path = createPathfromPoints(pointsScreen);
+                    speeds = calculateSpeeds();
 
                     drawingPanel.repaint();
                 }
@@ -127,12 +150,26 @@ public class GPSTracks extends JFrame {
 
                 // Verarbeite die Daten nach Bedarf
                 for (String value : data) {
-                    System.out.print(value + " ");
+                    //System.out.print(value + " ");
                 }
-                System.out.println(); // Neue Zeile für jede Zeile der CSV-Datei
+                //System.out.println(); // Neue Zeile für jede Zeile der CSV-Datei
 
+                // Punkte speichern
                 Point2D point = new Point2D.Double(Double.parseDouble(data[5]), Double.parseDouble(data[6]));
                 points.add(point);
+
+                //Timestamp speichern
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ssX");
+                String datestr = data[1].substring(1, data[1].length() - 1);
+
+                OffsetDateTime offsetDateTime = OffsetDateTime.now();
+                try {
+                    offsetDateTime = OffsetDateTime.parse(datestr, formatter);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                timestamps.add(offsetDateTime);
 
                 if (worldPath.getCurrentPoint() == null) {
                     worldPath.moveTo(Double.parseDouble(data[5]), Double.parseDouble(data[6]));
@@ -150,16 +187,28 @@ public class GPSTracks extends JFrame {
         return points;
     }
 
+    private List<Double> calculateSpeeds() {
+        List<Double> speeds = new ArrayList<>();
+        for (int i = 0; i < pointsWorld.size()-1; i++) {
+            double distance = calculateDistance(pointsWorld.get(i).getX(), pointsWorld.get(i).getY(), pointsWorld.get(i+1).getX(), pointsWorld.get(i+1).getY());
+            Duration timeDifference = Duration.between(timestamps.get(i), timestamps.get(i+1));
+            speeds.add(distance/timeDifference.toSeconds());
+        }
+        return speeds;
+    }
+
+    private static double calculateDistance(double x1, double y1, double x2, double y2) {
+        return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    }
+
     private List<Point2D> transformPoints(List<Point2D> points) {
-        System.out.println("transformPoints");
         AffineTransform2D T = AffineTransform2D.worldToScreen(world_extent, screen_extent);
-        System.out.println(T.toString());
         List<Point2D> transformedPoints = new ArrayList<>();
         for (Point2D p : points) {
-            System.out.printf("(%.3f | %.3f)",  p.getX(), p.getY());
+            //System.out.printf("(%.3f | %.3f)",  p.getX(), p.getY());
             Point2D tp = T.apply(p);
             transformedPoints.add(tp);
-            System.out.printf(" --> (%.3f | %.3f)\n",  tp.getX(), tp.getY());
+            //System.out.printf(" --> (%.3f | %.3f)\n",  tp.getX(), tp.getY());
         }
         return transformedPoints;
     }
