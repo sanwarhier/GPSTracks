@@ -5,6 +5,8 @@ import bmg.lib.AffineTransform2D;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -26,6 +28,8 @@ public class GPSTracks extends JFrame {
 
     private Path2D path = new Path2D.Double();
 
+    private int selectedWidth = 1;
+
     private List<Point2D> points = new ArrayList<>();
 
     public GPSTracks() {
@@ -44,6 +48,7 @@ public class GPSTracks extends JFrame {
                 super.paintComponent(g);
                 g.setColor(Color.RED);
                 Graphics2D g2d = (Graphics2D) g;
+                g2d.setStroke(new BasicStroke(selectedWidth));
                 g2d.draw(path);
             }
         };
@@ -63,6 +68,31 @@ public class GPSTracks extends JFrame {
                     points = transformPoints(points);
                     path = createPathfromPoints(points);
 
+                    drawingPanel.repaint();
+                }
+            }
+        });
+
+        widthSelectBox.addItemListener(new ItemListener() {
+            @Override
+            public void itemStateChanged(ItemEvent e) {
+                if (e.getStateChange() == ItemEvent.SELECTED) {
+                    String selectedWidthStr = (String) widthSelectBox.getSelectedItem();
+                    switch (selectedWidthStr) {
+                        case "dünn":
+                            selectedWidth = 1;
+                            break;
+                        case "mittel":
+                            selectedWidth = 2;
+                            break;
+                        case "dick":
+                            selectedWidth = 3;
+                            break;
+                    
+                        default:
+                            selectedWidth = 1;
+                            break;
+                    }
                     drawingPanel.repaint();
                 }
             }
