@@ -14,6 +14,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.net.URL;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
@@ -31,8 +32,7 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
 
     private double[] world_extent = { 0, 0, 0, 0 };
     private double[] screen_extent = { 0, 400, 0, 400 };
-
-    private Path2D path = new Path2D.Double();
+    private double[] world_longlat = {0, 0, 0, 0};
 
     private int selectedWidth = 1;
 
@@ -58,15 +58,34 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                //g.setColor(Color.RED);
                 Graphics2D g2d = (Graphics2D) g;
-                //g2d.setStroke(new BasicStroke(selectedWidth));
-                //g2d.draw(path);
 
                 // Setze Zoom- und Pan-Transformation
                 g2d.scale(scale, scale);
                 g2d.translate(offsetX, offsetY);
 
+                // male Hintergrundkarte
+                ImageIcon imageIcon = new ImageIcon();
+                try {
+                    String bbox = String.format(
+                        "%s,%s,%s,%s", 
+                        world_longlat[0], 
+                        world_longlat[2], 
+                        world_longlat[1], 
+                        world_longlat[3]);
+                    String requestUrl = String.format(
+                        "https://ows.mundialis.de/services/service?service=WMS&version=1.1.1&request=GetMap&layers=OSM-WMS&styles=default&width=800&height=600&srs=EPSG:4326&bbox=%s&format=image/png",
+                        bbox);
+                    URL imageUrl = new URL(requestUrl);
+
+                    // Bild herunterladen
+                    imageIcon = new ImageIcon(imageUrl);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                g2d.drawImage(imageIcon.getImage(), 0, 0, getWidth(), getHeight(), this);
+
+                // male Liniensegmente
                 for (int i = 0; i < speeds.size(); i++) {
                     g.setColor(Color.red);
                     if (speeds.get(i) > 2.2) {
@@ -108,7 +127,6 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
                     
                     pointsWorld = loadPointsFromCSV(selectedFile.getAbsolutePath());
                     pointsScreen = transformPoints(pointsWorld);
-                    path = createPathfromPoints(pointsScreen);
                     speeds = calculateSpeeds();
 
                     drawingPanel.repaint();
@@ -123,13 +141,13 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
                     String selectedWidthStr = (String) widthSelectBox.getSelectedItem();
                     switch (selectedWidthStr) {
                         case "dünn":
-                            selectedWidth = 1;
-                            break;
-                        case "mittel":
                             selectedWidth = 2;
                             break;
+                        case "mittel":
+                            selectedWidth = 4;
+                            break;
                         case "dick":
-                            selectedWidth = 3;
+                            selectedWidth = 6;
                             break;
                     
                         default:
@@ -148,7 +166,6 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
         controlPanel.add(new JLabel("Linienbreite:"));
         controlPanel.add(widthSelectBox);
         controlPanel.add(fileSelectButton);
-
 
         add(controlPanel, BorderLayout.NORTH);
         add(drawingPanel, BorderLayout.CENTER);
@@ -186,18 +203,13 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
         String csvSplitBy = ",";
         List<Point2D> points = new ArrayList<>();
         Path2D worldPath = new Path2D.Double();
+        Path2D longLatPath = new Path2D.Double();
 
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             br.readLine(); // erste Zeile
             while ((line = br.readLine()) != null) {
                 // Verwende das Trennzeichen, um die Zeile in Felder zu zerlegen
                 String[] data = line.split(csvSplitBy);
-
-                // Verarbeite die Daten nach Bedarf
-                for (String value : data) {
-                    //System.out.print(value + " ");
-                }
-                //System.out.println(); // Neue Zeile für jede Zeile der CSV-Datei
 
                 // Punkte speichern
                 Point2D point = new Point2D.Double(Double.parseDouble(data[5]), Double.parseDouble(data[6]));
@@ -206,26 +218,32 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
                 //Timestamp speichern
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ssX");
                 String datestr = data[1].substring(1, data[1].length() - 1);
-
                 OffsetDateTime offsetDateTime = OffsetDateTime.now();
                 try {
                     offsetDateTime = OffsetDateTime.parse(datestr, formatter);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-
                 timestamps.add(offsetDateTime);
 
+                // Path kreieren
                 if (worldPath.getCurrentPoint() == null) {
                     worldPath.moveTo(Double.parseDouble(data[5]), Double.parseDouble(data[6]));
+                    longLatPath.moveTo(Double.parseDouble(data[2]), Double.parseDouble(data[3]));
                 } else {
                     worldPath.lineTo(Double.parseDouble(data[5]), Double.parseDouble(data[6]));
+                    longLatPath.lineTo(Double.parseDouble(data[2]), Double.parseDouble(data[3]));
                 }
             }
             this.world_extent[0] = worldPath.getBounds2D().getMinX();
             this.world_extent[1] = worldPath.getBounds2D().getMaxX();
             this.world_extent[2] = worldPath.getBounds2D().getMinY();
             this.world_extent[3] = worldPath.getBounds2D().getMaxY();
+
+            this.world_longlat[0] = longLatPath.getBounds2D().getMinX();
+            this.world_longlat[1] = longLatPath.getBounds2D().getMaxX();
+            this.world_longlat[2] = longLatPath.getBounds2D().getMinY();
+            this.world_longlat[3] = longLatPath.getBounds2D().getMaxY();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -256,23 +274,6 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
             //System.out.printf(" --> (%.3f | %.3f)\n",  tp.getX(), tp.getY());
         }
         return transformedPoints;
-    }
-
-    private Path2D createPathfromPoints(List<Point2D> points) {
-        Path2D path = new Path2D.Double();
-        path.setWindingRule(Path2D.WIND_NON_ZERO); // Wicklungsregel festlegen (optional)
-
-        for (int i = 0; i < points.size(); i++) {
-            Point2D point = points.get(i);
-
-            if (i == 0) {
-                path.moveTo(point.getX(), point.getY()); // Erster Punkt als MoveTo setzen
-            } else {
-                path.lineTo(point.getX(), point.getY()); // Linie zu den folgenden Punkten hinzufügen
-            }
-        }
-
-        return path;
     }
 
     public static void main(String[] args) {
