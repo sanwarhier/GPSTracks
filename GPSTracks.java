@@ -1,5 +1,7 @@
 import javax.swing.*;
 
+import java.awt.event.MouseEvent;
+
 import bmg.lib.AffineTransform2D;
 
 import java.awt.*;
@@ -7,6 +9,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
+import java.awt.event.MouseMotionListener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -20,7 +23,7 @@ import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 
-public class GPSTracks extends JFrame {
+public class GPSTracks extends JFrame implements MouseMotionListener{
     private JButton fileSelectButton;
     private JComboBox<String> colorComboBox;
     private JComboBox<String> widthSelectBox;
@@ -38,13 +41,16 @@ public class GPSTracks extends JFrame {
     private List<Double> speeds = new ArrayList<>();
     private List<OffsetDateTime> timestamps = new ArrayList<>();
 
+    private double scale = 1.0;
+    private int offsetX = 0;
+    private int offsetY = 0;
+
     public GPSTracks() {
         setTitle("GPSTracks");
         setSize(400, 400);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        // Textfeld für die Anzahl der Features
         fileSelectButton = new JButton("Datei auswählen");
         widthSelectBox = new JComboBox<>(new String[] {"dünn", "mittel", "dick"});
         colorComboBox = new JComboBox<>(new String[] { "Rot", "Grün", "Blau" });
@@ -57,6 +63,10 @@ public class GPSTracks extends JFrame {
                 //g2d.setStroke(new BasicStroke(selectedWidth));
                 //g2d.draw(path);
 
+                // Setze Zoom- und Pan-Transformation
+                g2d.scale(scale, scale);
+                g2d.translate(offsetX, offsetY);
+
                 for (int i = 0; i < speeds.size(); i++) {
                     g.setColor(Color.red);
                     if (speeds.get(i) > 2.2) {
@@ -68,12 +78,22 @@ public class GPSTracks extends JFrame {
                     if (speeds.get(i) > 2.8) {
                         g.setColor(Color.green);
                     }
-                    g2d.setStroke(new BasicStroke(selectedWidth));
+                    g2d.setStroke(new BasicStroke(selectedWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                     Line2D line = new Line2D.Double(pointsScreen.get(i), pointsScreen.get(i+1));
                     g2d.draw(line);
                 }
             }
         };
+
+        drawingPanel.addMouseMotionListener(this);
+        addMouseMotionListener(this);
+
+        addMouseWheelListener(e -> {
+            // Zoom
+            double zoomFactor = (e.getWheelRotation() < 0) ? 1.1 : 0.9; // Zoom in or out
+            zoom(e.getX(), e.getY(), zoomFactor);
+            repaint();
+        });
 
         // Action Listener für den Button
         fileSelectButton.addActionListener(new ActionListener() {
@@ -134,6 +154,31 @@ public class GPSTracks extends JFrame {
         add(drawingPanel, BorderLayout.CENTER);
 
         setVisible(true);
+    }
+
+    private Point2D startPoint;
+
+    public void mouseMoved(MouseEvent e) {
+       startPoint = new Point2D.Double(e.getX(), e.getY());
+    }
+
+    public void mouseDragged(MouseEvent e) {
+       // Pan
+        double deltaX = e.getX() - startPoint.getX();
+        double deltaY = e.getY() - startPoint.getY();
+
+        offsetX += deltaX;
+        offsetY += deltaY;
+
+        startPoint = e.getPoint();
+        repaint();
+    }
+
+    private void zoom(int zoomX, int zoomY, double zoomFactor) {
+        // Adjust offset to keep the zoom center at the same location
+        offsetX -= zoomX / scale - zoomX / (scale * zoomFactor);
+        offsetY -= zoomY / scale - zoomY / (scale * zoomFactor);
+        scale *= zoomFactor;
     }
 
     private List<Point2D> loadPointsFromCSV(String filePath) {
