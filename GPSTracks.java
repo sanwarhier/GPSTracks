@@ -151,7 +151,7 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
                             break;
                     
                         default:
-                            selectedWidth = 1;
+                            selectedWidth = 2;
                             break;
                     }
                     drawingPanel.repaint();
@@ -180,7 +180,7 @@ public class GPSTracks extends JFrame implements MouseMotionListener{
     }
 
     public void mouseDragged(MouseEvent e) {
-       // Pan
+        // Pan
         double deltaX = e.getX() - startPoint.getX();
         double deltaY = e.getY() - startPoint.getY();
 
